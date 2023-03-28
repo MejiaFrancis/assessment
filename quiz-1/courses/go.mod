@@ -1,8 +1,9 @@
-module github.com/MejiaFrancis/assessment/quiz-1/courses
+module github.com/MejiaFrancis/assesment
 
 go 1.19
 
 require (
+	github.com/MejiaFrancis/assessment/quiz-1/courses v0.0.0-20230328043035-85f9a5fbc7ae
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/julienschmidt/httprouter v1.3.0
 )
