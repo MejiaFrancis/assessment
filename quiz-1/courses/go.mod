@@ -1,4 +1,4 @@
-module github.com/MejiaFrancis/courses
+module github.com/MejiaFrancis/assessment
 
 go 1.19
 
