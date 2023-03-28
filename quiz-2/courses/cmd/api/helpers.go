@@ -4,8 +4,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -42,5 +40,3 @@ func (app *application) WriteJSON(w http.ResponseWriter, status int, data envelo
 	return nil
 
 }
-
-
