@@ -2,117 +2,119 @@
 package data
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"time"
 
+	"github.com/MejiaFrancis/assessment/test-1/courses/internal/validator"
 	_ "github.com/lib/pq"
 )
 
-// course represents one row of data in our schools table
-type Course struct { //we can get data from client and put it in here and send to db or vise versa
+// Course represents one row of data in our Courses table
+type Course struct {
 	ID           int64     `json:"id"`
 	CourseCode   string    `json:"course_code"`
 	CourseTitle  string    `json:"course_title"`
 	CourseCredit string    `json:"course_credit"`
-	CreateAt     time.Time `json:"-"`
+	CreatedAt    time.Time `json:"-"`
 	Version      int32     `json:"version"`
 }
 
+func ValidateCourse(v *validator.Validator, course *Course) {
+	// Use the Check() method to execute our validation checks
+	v.Check(course.CourseCode != "", "course_code", "must be provided")
+	v.Check(len(course.CourseCode) <= 200, "name", "must not be more than 200 bytes long")
+
+	v.Check(course.CourseTitle != "", "course_title", "must be provided")
+	v.Check(len(course.CourseTitle) <= 200, "level", "must not be more than 200 bytes long")
+
+	v.Check(course.CourseCredit != "", "course_credit", "must be provided")
+	v.Check(len(course.CourseCredit) <= 200, "contact", "must not be more than 200 bytes long")
+}
+
+// implement our models
+// 1. Define our model
 type CourseModel struct {
 	DB *sql.DB
 }
 
-// Insert() allows us  to create a new Course
+// insert a new course
 func (m CourseModel) Insert(course *Course) error {
+	//Write an sql quote to insert
 	query := `
-		INSERT INTO courses (course_code, course_title, course_credit)
-		VALUES ($1, $2, $3)
+		INSERT INTO courses(course_code, course_title, course_credit)
+		VALUES($1, $2, $3)
 		RETURNING id, created_at, version
 	`
-	// Collect the data fields into a slice
+	//collect the data fields into a slice
 	args := []interface{}{
 		course.CourseCode,
 		course.CourseTitle,
-		course.CourseCredit,
-	}
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
-	return m.DB.QueryRowContext(ctx, query, args...).Scan(&course.ID, &course.CreateAt, &course.Version)
+		course.CourseCredit}
+
+	return m.DB.QueryRow(query, args...).Scan(&course.ID, &course.CreatedAt, &course.Version)
+
 }
 
-// Get() allows us to retrieve a specific School
+// Get a school
 func (m CourseModel) Get(id int64) (*Course, error) {
-	// Ensure that there is a valid id
 	if id < 1 {
 		return nil, ErrRecordNotFound
 	}
-	// Create the query
 	query := `
-		SELECT id, created_at, coursecode, coursetitle, coursecredit, version
+		SELECT id, created_at, course_code, course_title, course_credit, version
 		FROM courses
 		WHERE id = $1
 	`
-	// Declare a School variable to hold the returned data
+	//define a School variable to hold the school return
 	var course Course
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
-	// Execute the query using QueryRow()
-	err := m.DB.QueryRowContext(ctx, query, id).Scan(
+	err := m.DB.QueryRow(query, id).Scan(
 		&course.ID,
-		&course.CreateAt,
+		&course.CreatedAt,
 		&course.CourseCode,
 		&course.CourseTitle,
 		&course.CourseCredit,
 		&course.Version,
 	)
-	// Handle any errors
+
+	//check for errors
 	if err != nil {
-		// Check the type of error
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			return nil, ErrRecordNotFound
 		default:
 			return nil, err
 		}
+
 	}
-	// Success
+	//no errors found
 	return &course, nil
+
 }
 
-// Update() allows us to edit/alter a specific Course
-// Optimistic locking (version number)
+// update school data with fixed DATA RACES
+// optimistc locking in the version number
 func (m CourseModel) Update(course *Course) error {
-	// Create a query
+	//create
 	query := `
-		UPDATE courses
-		SET cousecode = $1, coursetitle = $2, coursecredit= $3,
-		     version = version + 1
+		UPDATE courses 
+		SET course_code = $1, course_title = $2, course_credit = $3, version = version + 1
 		WHERE id = $4
-		AND version = $5
-		RETURNING version
-	`
+		AND version =$5
+		RETURNING version 
+		`
 	args := []interface{}{
 		course.CourseCode,
 		course.CourseTitle,
 		course.CourseCredit,
 		course.ID,
-		course.Version,
+		course.Version, //we want to keep a check in version to make sure it hasnt changed
 	}
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
-	// Check for edit conflicts
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&course.Version)
+	//check for edit conflicts
+	err := m.DB.QueryRow(query, args...).Scan(&course.Version)
 	if err != nil {
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, sql.ErrNoRows): //tells me no rows was return
 			return ErrEditConflict
 		default:
 			return err
@@ -121,35 +123,30 @@ func (m CourseModel) Update(course *Course) error {
 	return nil
 }
 
-// Delete() removes a specific Course
+// delete school data
 func (m CourseModel) Delete(id int64) error {
-	// Ensure that there is a valid id
 	if id < 1 {
 		return ErrRecordNotFound
 	}
-	// Create the delete query
+	//create the delete query
 	query := `
-		DELETE FROM courses
-		WHERE id = $1
+	DELETE FROM courses
+	WHERE id =$1
 	`
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
-	// Execute the query
-	result, err := m.DB.ExecContext(ctx, query, id)
+	//execute the query
+	result, err := m.DB.Exec(query, id)
 	if err != nil {
 		return err
 	}
-	// Check how many rows were affected by the delete operation. We
-	// call the RowsAffected() method on the result variable
+	//check how many rows were affected
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	// Check if no rows were affected
+	//check if 0 rows affected
 	if rowsAffected == 0 {
 		return ErrRecordNotFound
 	}
 	return nil
+
 }

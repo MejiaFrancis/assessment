@@ -1,65 +1,176 @@
-// Filename: ./cmd/api/handlers.go
+// Filecoursecode: ./cmd/api/handlers.go
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/MejiaFrancis/assessment/test-1/courses/internal/data"
+	"github.com/MejiaFrancis/assessment/test-1/courses/internal/validator"
 )
 
-func (app *application) createCoursesHandler(w http.ResponseWriter, r *http.Request) {
-	//create a struct to hold a school that will be provided to us
-	//via the request
+func (app *application) createCourseHandler(w http.ResponseWriter, r *http.Request) {
+	// create a struct to hold a input that will be provided to us
+	// via the request
 	var input struct {
-		ID           int64     `json:"id"`
-		CourseCode   string    `json:"course_code"`
-		CourseTitle  string    `json:"course_title"`
-		CourseCredit string    `json:"course_credit"`
-		Name         string    `json:"name"`
-		Level        string    `json:"level"`
-		Contact      string    `json:"contact"`
-		Phone        string    `json:"phone"`
-		Email        string    `json:"email"`
-		Website      string    `json:"website,omitempty"`
-		Address      string    `json:"address"`
-		Mode         []string  `json:"mode"`
-		CreateAt     time.Time `json:"-"`
-		Version      int32     `json:"version"`
+		CourseCode   string `json:"course_code"`
+		CourseTitle  string `json:"course_title"`
+		CourseCredit string `json:"course_Credit"`
 	}
-	//Decode the JSON request
-	err := app.readJSON(w, r, &input) //we take r.Body and decode it into input
+	// decode our the JSON request
+	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
-	//Print the request
-	fmt.Fprintf(w, "%+v\n", input)
+	// Copy the values from the input struct to the new course struct
+	course := &data.Course{
+		CourseCode:   input.CourseCode,
+		CourseTitle:  input.CourseTitle,
+		CourseCredit: input.CourseCredit,
+	}
+	// let's validate our JSON input
+	v := validator.New()
+	// Check for validation errrors
+	if data.ValidateCourse(v, course); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
 
+	//write our validated school to database
+	err = app.models.Courses.Insert(course)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	//set the creation header
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/course/%d", course.ID))
+	//write the response
+
+	err = app.writeJSON(w, http.StatusCreated, envelope{"course": course}, headers)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	} //write the response
+
+	// err = app.writeJSON(w, http.StatusCreated, envelope{" course": course}, headers)
+	// if err != nil {
+	// 	app.serverErrorResponse(w, r, err)
+	// }
 }
 
-func (app *application) showCoursesHandler(w http.ResponseWriter, r *http.Request) {
-	// fmt.Fprintln(w, "School displayed...")
+func (app *application) showCourseHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := app.readIDParams(r)
 	if err != nil {
 		app.notFoundResponse(w, r)
 		return
 	}
-
-	//fmt.Fprintf(w, "Show details of Courses %d \n ", id)
-	course := data.Course{
-		ID:           id,
-		CreateAt:     time.Now(),
-		CourseCode:   "CMPS142",
-		CourseTitle:  "Principles of Programming",
-		CourseCredit: "3",
-		Version:      1,
-	}
-	err = app.WriteJSON(w, http.StatusOK, envelope{"course": course}, nil)
+	//fetch the school with the associated idea id
+	course, err := app.models.Courses.Get(id)
 	if err != nil {
-		app.serverErrorResponse(w, r, err) //
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"course": course}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+}
 
+func (app *application) updateCourseHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParams(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+	//fetch the original School
+	course, err := app.models.Courses.Get(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	//create an input to hold the read in from fetch client
+	//we will not use string but pointers for partial updates
+	//pointers have a default value of nil
+	var input struct {
+		CourseCode   *string `json:"course_code"`
+		CourseTitle  *string `json:"course_title"`
+		CourseCredit *string `json:"course_credit"`
+	}
+	// decode our the JSON request
+	err = app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	//check for updates
+	if input.CourseCode != nil {
+		course.CourseCode = *input.CourseCode
+	}
+	if input.CourseTitle != nil {
+		course.CourseTitle = *input.CourseTitle
+	}
+	if input.CourseCredit != nil {
+		course.CourseCredit = *input.CourseCredit
+	}
+
+	// let's validate our JSON input to make sure they are valid
+	v := validator.New()
+	// Check for validation errrors
+	if data.ValidateCourse(v, course); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	//perform the update
+	err = app.models.Courses.Update(course)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	} //write the response
+	err = app.writeJSON(w, http.StatusOK, envelope{"course": course}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) deleteCourseHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParams(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+	//delete the schools from the database
+	err = app.models.Courses.Delete(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	//if no errors then deletion was succesfull
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "courses was deleted successful"}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
