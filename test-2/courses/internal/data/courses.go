@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MejiaFrancis/assessment/test-2/courses/internal/validator"
+	"github.com/MejiaFrancis/assessment/test-2/internal/validator"
 	_ "github.com/lib/pq"
 )
 
