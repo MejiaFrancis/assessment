@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MejiaFrancis/assesment/quiz-1/courses/internal/data"
+	"github.com/MejiaFrancis/assessments/internal/data"
 )
 
 func (app *application) createCourseHandler(w http.ResponseWriter, r *http.Request) {
