@@ -33,6 +33,7 @@ type config = struct {
 type application struct {
 	config config //variable name "config" of type config
 	logger *log.Logger
+	
 }
 
 func main() {

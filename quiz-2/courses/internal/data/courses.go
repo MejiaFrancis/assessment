@@ -2,6 +2,7 @@
 package data
 
 import (
+	"database/sql"
 	"time"
 )
 
@@ -11,5 +12,10 @@ type Course struct { //we can get data from client and put it in here and send t
 	CourseCode   string    `json:"course_code"`
 	CourseTitle  string    `json:"course_title"`
 	CourseCredit string    `json:"course_credit"`
-	
+	CreateAt     time.Time `json:"-"`
+	Version      int32     `json:"version"`
+}
+
+type CourseModel struct {
+	DB *sql.DB
 }
